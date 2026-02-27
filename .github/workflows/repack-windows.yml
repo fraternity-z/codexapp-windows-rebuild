@@ -13,10 +13,6 @@ on:
         required: true
         default: true
         type: boolean
-      tag_name:
-        description: "可选：自定义 Release Tag（留空自动生成）"
-        required: false
-        type: string
 
 permissions:
   contents: write
@@ -82,12 +78,11 @@ jobs:
         id: tag
         shell: pwsh
         run: |
-          $inputTag = "${{ inputs.tag_name }}"
-          if ([string]::IsNullOrWhiteSpace($inputTag)) {
-            $tag = "codex-win-v${{ steps.metadata.outputs.version }}"
-          } else {
-            $tag = $inputTag
+          $version = "${{ steps.metadata.outputs.version }}"
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            throw "Missing version from build metadata"
           }
+          $tag = "codex-win-v$version"
           "value=$tag" >> $env:GITHUB_OUTPUT
 
       - name: Publish GitHub Release
@@ -97,6 +92,8 @@ jobs:
           tag_name: ${{ steps.tag.outputs.value }}
           name: Codex Windows v${{ steps.metadata.outputs.version }}
           body: |
+            Version: ${{ steps.metadata.outputs.version }}
+            Tag: ${{ steps.tag.outputs.value }}
             Source DMG: ${{ inputs.dmg_url }}
             Installer: ${{ steps.metadata.outputs.installer_name }}
             SHA256: ${{ steps.metadata.outputs.sha256 }}

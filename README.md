@@ -110,7 +110,7 @@ npm run repack -- --dmg-file "D:\path\Codex.dmg" --electron-version "40.0.0"
 
 - `dmg_url`：DMG 下载地址
 - `publish_release`：`true` 时自动发布 GitHub Release
-- `tag_name`：可选；留空时自动生成 `codex-win-v<version>`
+- Tag 自动按构建版本生成：`codex-win-v<version>`
 
 ### 产物位置
 
