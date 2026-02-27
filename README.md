@@ -1,5 +1,7 @@
 # Codex Windows Repack Toolkit
 
+中文 | [English](README.en.md)
+
 用于把 `Codex.dmg`（macOS 已打包产物）重封装为 Windows 可安装程序（NSIS `.exe`）。
 
 默认 DMG 下载链接：
