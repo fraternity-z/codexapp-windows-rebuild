@@ -48,6 +48,8 @@ npm run repack
 - 如果项目根目录存在 `Codex.dmg`，优先使用该文件
 - 如果不存在，则从默认链接下载 DMG
 - 构建时会自动打补丁，禁用 `appSunset` 强制升级页（避免启动即提示必须更新）
+- 构建时会从 DMG 的 `Contents/Resources/electron.icns` 自动生成 Windows `app.ico`，并用于应用/安装器图标
+- 若重装后任务栏或开始菜单仍显示旧图标，通常是 Windows 图标缓存导致，重启资源管理器后会刷新
 
 3. 指定 DMG 下载地址
 

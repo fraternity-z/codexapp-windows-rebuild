@@ -18,6 +18,7 @@ yarn-error.log*
 
 # local inputs
 Codex.dmg
+.omc/
 
 # system/editor files
 .DS_Store

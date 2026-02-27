@@ -19,6 +19,8 @@ import {
 const require = createRequire(import.meta.url);
 const asar = require("@electron/asar");
 const { path7z } = require("7zip-bin-full");
+const { Icns } = require("@fiahfy/icns");
+const toIco = require("to-ico");
 
 const DEFAULT_ELECTRON_VERSION = "40.0.0";
 const DEFAULT_NODE_PTY_VERSION = "^1.1.0";
@@ -27,6 +29,7 @@ const ELECTRON_HEADERS_URL = "https://electronjs.org/headers";
 const DEFAULT_LOCAL_DMG = "Codex.dmg";
 const SUNSET_GUARD_BEFORE = "const s=Xs(i);if(r){";
 const SUNSET_GUARD_AFTER = "const s=!1;if(r){";
+const WINDOWS_ICON_SIZES = [16, 24, 32, 48, 64, 128, 256];
 
 async function prepareNativeModules(nativeDir, versions) {
   await fse.emptyDir(nativeDir);
@@ -129,13 +132,41 @@ async function prepareBinaries(toolkitRoot, resourcesRoot, winBinariesDir, winEx
   }
   await fse.copy(noticeFile, path.join(winExtraDir, "THIRD_PARTY_NOTICES.txt"));
   await fse.copy(soundFile, path.join(winExtraDir, "notification.wav"));
+  const iconPath = await createWindowsIconFromResources(resourcesRoot, winExtraDir);
+  return { iconPath };
 }
 
-function createBuilderConfig(paths, appVersion) {
+function isPngBuffer(value) {
+  if (!Buffer.isBuffer(value) || value.length < 8) {
+    return false;
+  }
+  const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  return value.subarray(0, 8).equals(signature);
+}
+
+async function createWindowsIconFromResources(resourcesRoot, winExtraDir) {
+  const icnsPath = path.join(resourcesRoot, "electron.icns");
+  if (!(await fse.pathExists(icnsPath))) {
+    throw new Error(`Missing electron.icns in resources: ${icnsPath}`);
+  }
+  const icns = Icns.from(await fs.readFile(icnsPath));
+  const pngBuffers = icns.images.map((entry) => entry.image).filter((entry) => isPngBuffer(entry));
+  if (pngBuffers.length === 0) {
+    throw new Error(`No PNG icon frames found in ${icnsPath}`);
+  }
+  pngBuffers.sort((left, right) => right.length - left.length);
+  const icoBuffer = await toIco([pngBuffers[0]], { resize: true, sizes: WINDOWS_ICON_SIZES });
+  const iconPath = path.join(winExtraDir, "app.ico");
+  await fs.writeFile(iconPath, icoBuffer);
+  return iconPath;
+}
+
+function createBuilderConfig(paths, appVersion, iconPath) {
   return {
     appId: "com.openai.codex",
     productName: "Codex",
-    directories: { app: paths.winSource, output: paths.releaseDir },
+    directories: { app: paths.winSource, output: paths.releaseDir, buildResources: paths.winExtra },
+    icon: iconPath,
     files: ["**/*"],
     asar: true,
     asarUnpack: [
@@ -156,12 +187,16 @@ function createBuilderConfig(paths, appVersion) {
     win: {
       target: [{ target: "nsis", arch: ["x64"] }],
       artifactName: `Codex-Setup-${appVersion}.exe`,
+      icon: iconPath,
     },
     nsis: {
       oneClick: false,
       perMachine: false,
       allowElevation: true,
       allowToChangeInstallationDirectory: true,
+      installerIcon: "app.ico",
+      uninstallerIcon: "app.ico",
+      installerHeaderIcon: "app.ico",
     },
   };
 }
@@ -234,8 +269,8 @@ async function main() {
   await prepareNativeModules(paths.nativeDir, versions);
   const prepared = await prepareWinSource(paths, sourcePkg, versions);
   const runtimePkg = prepared.runtimePackage;
-  await prepareBinaries(toolkitRoot, resourcesRoot, paths.winBinaries, paths.winExtra);
-  await writeJson(paths.builderConfig, createBuilderConfig(paths, runtimePkg.version));
+  const binaries = await prepareBinaries(toolkitRoot, resourcesRoot, paths.winBinaries, paths.winExtra);
+  await writeJson(paths.builderConfig, createBuilderConfig(paths, runtimePkg.version, binaries.iconPath));
   await run(
     "npx",
     ["electron-builder", "--config", paths.builderConfig, "--win", "nsis", "--x64", "--publish", "never"],

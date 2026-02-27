@@ -11,11 +11,13 @@
   "devDependencies": {
     "@balena/udif": "^1.1.2",
     "@electron/asar": "^4.0.1",
+    "@fiahfy/icns": "^0.0.7",
     "@openai/codex": "^0.106.0",
     "@vscode/ripgrep": "^1.17.0",
     "7zip-bin-full": "^26.0.1",
     "electron": "^40.0.0",
     "electron-builder": "^26.8.1",
-    "fs-extra": "^11.3.3"
+    "fs-extra": "^11.3.3",
+    "to-ico": "^1.1.5"
   }
 }
