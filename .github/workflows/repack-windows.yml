@@ -28,26 +28,43 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Resolve Toolkit Directory
+        id: locate
+        shell: pwsh
+        run: |
+          if ((Test-Path "./package.json") -and (Test-Path "./scripts/repack.mjs")) {
+            "toolkit_dir=." >> $env:GITHUB_OUTPUT
+          } elseif ((Test-Path "./codexapp-windows-rebuild/package.json") -and (Test-Path "./codexapp-windows-rebuild/scripts/repack.mjs")) {
+            "toolkit_dir=codexapp-windows-rebuild" >> $env:GITHUB_OUTPUT
+          } else {
+            throw "Toolkit root not found. Expected either ./ or ./codexapp-windows-rebuild"
+          }
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: "npm"
-          cache-dependency-path: package-lock.json
+          cache-dependency-path: ${{ steps.locate.outputs.toolkit_dir }}/package-lock.json
 
       - name: Install Toolkit Dependencies
-        working-directory: codexapp-windows-rebuild
+        working-directory: ${{ steps.locate.outputs.toolkit_dir }}
         run: npm ci
 
       - name: Repack Installer
-        working-directory: codexapp-windows-rebuild
+        working-directory: ${{ steps.locate.outputs.toolkit_dir }}
         run: npm run repack -- --dmg-url "${{ inputs.dmg_url }}"
 
       - name: Read Build Metadata
         id: metadata
         shell: pwsh
         run: |
-          $meta = Get-Content release/build-metadata.json -Raw | ConvertFrom-Json
+          $toolkitDir = "${{ steps.locate.outputs.toolkit_dir }}"
+          $metaPath = Join-Path $toolkitDir "release/build-metadata.json"
+          if (!(Test-Path $metaPath)) {
+            throw "Missing metadata file: $metaPath"
+          }
+          $meta = Get-Content $metaPath -Raw | ConvertFrom-Json
           "version=$($meta.version)" >> $env:GITHUB_OUTPUT
           "installer_name=$($meta.installerName)" >> $env:GITHUB_OUTPUT
           "sha256=$($meta.sha256)" >> $env:GITHUB_OUTPUT
@@ -57,9 +74,9 @@ jobs:
         with:
           name: codex-windows-installer-${{ steps.metadata.outputs.version }}
           path: |
-            release/*.exe
-            release/*.blockmap
-            release/build-metadata.json
+            ${{ steps.locate.outputs.toolkit_dir }}/release/*.exe
+            ${{ steps.locate.outputs.toolkit_dir }}/release/*.blockmap
+            ${{ steps.locate.outputs.toolkit_dir }}/release/build-metadata.json
 
       - name: Resolve Release Tag
         id: tag
@@ -84,6 +101,6 @@ jobs:
             Installer: ${{ steps.metadata.outputs.installer_name }}
             SHA256: ${{ steps.metadata.outputs.sha256 }}
           files: |
-            release/*.exe
-            release/*.blockmap
-            release/build-metadata.json
+            ${{ steps.locate.outputs.toolkit_dir }}/release/*.exe
+            ${{ steps.locate.outputs.toolkit_dir }}/release/*.blockmap
+            ${{ steps.locate.outputs.toolkit_dir }}/release/build-metadata.json

@@ -119,4 +119,9 @@ npm run repack -- --dmg-file "D:\path\Codex.dmg" --electron-version "40.0.0"
 
 ## 路径注意事项
 
-当前 workflow 按 `codexapp-windows-rebuild` 是仓库内子目录编写（例如 `working-directory: codexapp-windows-rebuild`）。
+当前 workflow 已支持自动识别两种仓库结构：
+
+- 仓库根目录就是工具目录内容（`package.json` 在仓库根）
+- 仓库根目录下有 `codexapp-windows-rebuild/` 子目录
+
+不需要再手动改 `working-directory`。
