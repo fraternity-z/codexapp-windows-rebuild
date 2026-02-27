@@ -236,9 +236,11 @@ async function main() {
   const runtimePkg = prepared.runtimePackage;
   await prepareBinaries(toolkitRoot, resourcesRoot, paths.winBinaries, paths.winExtra);
   await writeJson(paths.builderConfig, createBuilderConfig(paths, runtimePkg.version));
-  await run("npx", ["electron-builder", "--config", paths.builderConfig, "--win", "nsis", "--x64"], {
-    cwd: toolkitRoot,
-  });
+  await run(
+    "npx",
+    ["electron-builder", "--config", paths.builderConfig, "--win", "nsis", "--x64", "--publish", "never"],
+    { cwd: toolkitRoot },
+  );
 
   const installerPath = await findInstallerExe(paths.releaseDir);
   const sha256 = await sha256File(installerPath);
