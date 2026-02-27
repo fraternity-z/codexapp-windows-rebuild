@@ -1,0 +1,89 @@
+name: Repack Codex Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      dmg_url:
+        description: "DMG 下载地址"
+        required: true
+        default: "https://persistent.oaistatic.com/codex-app-prod/Codex.dmg"
+        type: string
+      publish_release:
+        description: "构建后是否自动发布 GitHub Release"
+        required: true
+        default: true
+        type: boolean
+      tag_name:
+        description: "可选：自定义 Release Tag（留空自动生成）"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Install Toolkit Dependencies
+        working-directory: codexapp-windows-rebuild
+        run: npm ci
+
+      - name: Repack Installer
+        working-directory: codexapp-windows-rebuild
+        run: npm run repack -- --dmg-url "${{ inputs.dmg_url }}"
+
+      - name: Read Build Metadata
+        id: metadata
+        shell: pwsh
+        run: |
+          $meta = Get-Content release/build-metadata.json -Raw | ConvertFrom-Json
+          "version=$($meta.version)" >> $env:GITHUB_OUTPUT
+          "installer_name=$($meta.installerName)" >> $env:GITHUB_OUTPUT
+          "sha256=$($meta.sha256)" >> $env:GITHUB_OUTPUT
+
+      - name: Upload Installer Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-windows-installer-${{ steps.metadata.outputs.version }}
+          path: |
+            release/*.exe
+            release/*.blockmap
+            release/build-metadata.json
+
+      - name: Resolve Release Tag
+        id: tag
+        shell: pwsh
+        run: |
+          $inputTag = "${{ inputs.tag_name }}"
+          if ([string]::IsNullOrWhiteSpace($inputTag)) {
+            $tag = "codex-win-v${{ steps.metadata.outputs.version }}"
+          } else {
+            $tag = $inputTag
+          }
+          "value=$tag" >> $env:GITHUB_OUTPUT
+
+      - name: Publish GitHub Release
+        if: ${{ inputs.publish_release }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.value }}
+          name: Codex Windows v${{ steps.metadata.outputs.version }}
+          body: |
+            Source DMG: ${{ inputs.dmg_url }}
+            Installer: ${{ steps.metadata.outputs.installer_name }}
+            SHA256: ${{ steps.metadata.outputs.sha256 }}
+          files: |
+            release/*.exe
+            release/*.blockmap
+            release/build-metadata.json

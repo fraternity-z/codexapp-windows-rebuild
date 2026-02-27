@@ -1,0 +1,21 @@
+{
+  "name": "codexapp-windows-rebuild",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Repack Codex DMG to Windows installer",
+  "type": "module",
+  "scripts": {
+    "repack": "node ./scripts/repack.mjs",
+    "repack:default": "node ./scripts/repack.mjs"
+  },
+  "devDependencies": {
+    "@balena/udif": "^1.1.2",
+    "@electron/asar": "^4.0.1",
+    "@openai/codex": "^0.106.0",
+    "@vscode/ripgrep": "^1.17.0",
+    "7zip-bin-full": "^26.0.1",
+    "electron": "^40.0.0",
+    "electron-builder": "^26.8.1",
+    "fs-extra": "^11.3.3"
+  }
+}
