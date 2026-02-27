@@ -47,6 +47,7 @@ npm run repack
 
 - 如果项目根目录存在 `Codex.dmg`，优先使用该文件
 - 如果不存在，则从默认链接下载 DMG
+- 构建时会自动打补丁，禁用 `appSunset` 强制升级页（避免启动即提示必须更新）
 
 3. 指定 DMG 下载地址
 
@@ -91,6 +92,8 @@ npm run repack -- --dmg-file "D:\path\Codex.dmg" --electron-version "40.0.0"
   - `installerFile`
   - `installerName`
   - `sha256`
+  - `sunsetPatchApplied`
+  - `sunsetPatchedFile`
 
 ## GitHub Actions 自动构建/发布
 
@@ -117,4 +120,3 @@ npm run repack -- --dmg-file "D:\path\Codex.dmg" --electron-version "40.0.0"
 ## 路径注意事项
 
 当前 workflow 按 `codexapp-windows-rebuild` 是仓库内子目录编写（例如 `working-directory: codexapp-windows-rebuild`）。
-

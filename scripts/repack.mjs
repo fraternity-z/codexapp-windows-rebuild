@@ -25,6 +25,8 @@ const DEFAULT_NODE_PTY_VERSION = "^1.1.0";
 const DEFAULT_SQLITE_VERSION = "^12.4.6";
 const ELECTRON_HEADERS_URL = "https://electronjs.org/headers";
 const DEFAULT_LOCAL_DMG = "Codex.dmg";
+const SUNSET_GUARD_BEFORE = "const s=Xs(i);if(r){";
+const SUNSET_GUARD_AFTER = "const s=!1;if(r){";
 
 async function prepareNativeModules(nativeDir, versions) {
   await fse.emptyDir(nativeDir);
@@ -65,6 +67,32 @@ function buildRuntimePackage(sourcePkg, versions) {
   };
 }
 
+async function disableSunsetUpgradeGate(winSourceDir) {
+  const assetsDir = path.join(winSourceDir, "webview", "assets");
+  const names = await fs.readdir(assetsDir);
+  const indexFiles = names.filter((name) => /^index-.*\.js$/i.test(name)).sort();
+  if (indexFiles.length === 0) {
+    throw new Error(`No webview index bundle found in ${assetsDir}`);
+  }
+
+  for (const fileName of indexFiles) {
+    const indexPath = path.join(assetsDir, fileName);
+    const content = await fs.readFile(indexPath, "utf8");
+    if (!content.includes("appSunset.title")) {
+      continue;
+    }
+    const hitCount = content.split(SUNSET_GUARD_BEFORE).length - 1;
+    if (hitCount !== 1) {
+      throw new Error(`Unexpected sunset guard count (${hitCount}) in ${indexPath}`);
+    }
+    const patched = content.replace(SUNSET_GUARD_BEFORE, SUNSET_GUARD_AFTER);
+    await fs.writeFile(indexPath, patched, "utf8");
+    return { indexPath, hitCount };
+  }
+
+  throw new Error(`Sunset marker not found in index bundle files under ${assetsDir}`);
+}
+
 async function prepareWinSource(paths, sourcePkg, versions) {
   await fse.emptyDir(paths.winSource);
   await fse.copy(paths.appUnpacked, paths.winSource);
@@ -79,7 +107,8 @@ async function prepareWinSource(paths, sourcePkg, versions) {
   await fse.copy(path.join(paths.nativeDir, "node_modules", "better-sqlite3"), sqliteTarget);
   const runtimePackage = buildRuntimePackage(sourcePkg, versions);
   await writeJson(path.join(paths.winSource, "package.json"), runtimePackage);
-  return runtimePackage;
+  const sunsetPatch = await disableSunsetUpgradeGate(paths.winSource);
+  return { runtimePackage, sunsetPatch };
 }
 
 async function prepareBinaries(toolkitRoot, resourcesRoot, winBinariesDir, winExtraDir) {
@@ -203,7 +232,8 @@ async function main() {
   };
 
   await prepareNativeModules(paths.nativeDir, versions);
-  const runtimePkg = await prepareWinSource(paths, sourcePkg, versions);
+  const prepared = await prepareWinSource(paths, sourcePkg, versions);
+  const runtimePkg = prepared.runtimePackage;
   await prepareBinaries(toolkitRoot, resourcesRoot, paths.winBinaries, paths.winExtra);
   await writeJson(paths.builderConfig, createBuilderConfig(paths, runtimePkg.version));
   await run("npx", ["electron-builder", "--config", paths.builderConfig, "--win", "nsis", "--x64"], {
@@ -220,6 +250,8 @@ async function main() {
     installerFile: path.resolve(installerPath),
     installerName: path.basename(installerPath),
     sha256,
+    sunsetPatchApplied: true,
+    sunsetPatchedFile: path.resolve(prepared.sunsetPatch.indexPath),
   });
 
   console.log(`Installer: ${path.resolve(installerPath)}`);
