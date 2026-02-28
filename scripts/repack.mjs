@@ -27,8 +27,9 @@ const DEFAULT_NODE_PTY_VERSION = "^1.1.0";
 const DEFAULT_SQLITE_VERSION = "^12.4.6";
 const ELECTRON_HEADERS_URL = "https://electronjs.org/headers";
 const DEFAULT_LOCAL_DMG = "Codex.dmg";
-const SUNSET_GUARD_BEFORE = "const s=Xs(i);if(r){";
+const SUNSET_GUARD_PATTERN = /const s=[A-Za-z_$][A-Za-z0-9_$]*\(i\);if\(r\)\{/g;
 const SUNSET_GUARD_AFTER = "const s=!1;if(r){";
+const SUNSET_GUARD_CONTEXT_RADIUS = 2500;
 const WINDOWS_ICON_SIZES = [16, 24, 32, 48, 64, 128, 256];
 
 async function prepareNativeModules(nativeDir, versions) {
@@ -81,16 +82,32 @@ async function disableSunsetUpgradeGate(winSourceDir) {
   for (const fileName of indexFiles) {
     const indexPath = path.join(assetsDir, fileName);
     const content = await fs.readFile(indexPath, "utf8");
-    if (!content.includes("appSunset.title")) {
+    const markerIndex = content.indexOf("appSunset.title");
+    if (markerIndex === -1) {
       continue;
     }
-    const hitCount = content.split(SUNSET_GUARD_BEFORE).length - 1;
-    if (hitCount !== 1) {
-      throw new Error(`Unexpected sunset guard count (${hitCount}) in ${indexPath}`);
+
+    const windowStart = Math.max(0, markerIndex - SUNSET_GUARD_CONTEXT_RADIUS);
+    const windowEnd = Math.min(content.length, markerIndex + SUNSET_GUARD_CONTEXT_RADIUS);
+    const windowContent = content.slice(windowStart, windowEnd);
+    const matches = Array.from(windowContent.matchAll(SUNSET_GUARD_PATTERN));
+    if (matches.length !== 1) {
+      throw new Error(`Unexpected sunset guard count (${matches.length}) in ${indexPath}`);
     }
-    const patched = content.replace(SUNSET_GUARD_BEFORE, SUNSET_GUARD_AFTER);
+    const [match] = matches;
+    if (match.index == null) {
+      throw new Error(`Failed to locate sunset guard index in ${indexPath}`);
+    }
+
+    const guardBefore = match[0];
+    const absoluteIndex = windowStart + match.index;
+    const patched =
+      content.slice(0, absoluteIndex) +
+      SUNSET_GUARD_AFTER +
+      content.slice(absoluteIndex + guardBefore.length);
+
     await fs.writeFile(indexPath, patched, "utf8");
-    return { indexPath, hitCount };
+    return { indexPath, hitCount: matches.length };
   }
 
   throw new Error(`Sunset marker not found in index bundle files under ${assetsDir}`);
