@@ -30,6 +30,11 @@ const DEFAULT_LOCAL_DMG = "Codex.dmg";
 const SUNSET_GUARD_PATTERN = /const s=[A-Za-z_$][A-Za-z0-9_$]*\(i\);if\(r\)\{/g;
 const SUNSET_GUARD_AFTER = "const s=!1;if(r){";
 const SUNSET_GUARD_CONTEXT_RADIUS = 2500;
+const WINDOWS_PATH_NORMALIZER_SOURCE = 'function Vr(t){return t.replace(/\\\\/g,"/")}';
+const WINDOWS_PATH_NORMALIZER_REPLACEMENT =
+  'function Vr(t){const e=t.replace(/\\\\/g,"/");return e.startsWith("//?/")||e.startsWith("//./")?e.slice(4):e}';
+const CODEX_HOME_ENV_PATCH_PATTERN =
+  /const n=\{\.\.\.process\.env,RUST_LOG:process\.env\.RUST_LOG\?\?"warn",CODEX_INTERNAL_ORIGINATOR_OVERRIDE:t\.defaultOriginator\?\?([A-Za-z_$][A-Za-z0-9_$]*)\};/g;
 const WINDOWS_ICON_SIZES = [16, 24, 32, 48, 64, 128, 256];
 
 async function prepareNativeModules(nativeDir, versions) {
@@ -113,6 +118,57 @@ async function disableSunsetUpgradeGate(winSourceDir) {
   throw new Error(`Sunset marker not found in index bundle files under ${assetsDir}`);
 }
 
+async function patchCodexHomeForBundledCli(winSourceDir) {
+  const mainPath = path.join(winSourceDir, ".vite", "build", "main.js");
+  const content = await fs.readFile(mainPath, "utf8");
+  const matches = Array.from(content.matchAll(CODEX_HOME_ENV_PATCH_PATTERN));
+  if (matches.length !== 1) {
+    throw new Error(`Unexpected CODEX_HOME env patch target count (${matches.length}) in ${mainPath}`);
+  }
+
+  const patched = content.replace(CODEX_HOME_ENV_PATCH_PATTERN, (_full, fallbackVar) => {
+    return `const n={...process.env,RUST_LOG:process.env.RUST_LOG??"warn",CODEX_INTERNAL_ORIGINATOR_OVERRIDE:t.defaultOriginator??${fallbackVar},CODEX_HOME:process.env.CODEX_HOME??Zt({})};`;
+  });
+
+  await fs.writeFile(mainPath, patched, "utf8");
+  return { mainPath, hitCount: matches.length };
+}
+
+async function patchWindowsExtendedPathNormalization(winSourceDir) {
+  const assetsDir = path.join(winSourceDir, "webview", "assets");
+  const names = await fs.readdir(assetsDir);
+  const indexFiles = names.filter((name) => /^index-.*\.js$/i.test(name)).sort();
+  if (indexFiles.length === 0) {
+    throw new Error(`No webview index bundle found in ${assetsDir}`);
+  }
+
+  for (const fileName of indexFiles) {
+    const indexPath = path.join(assetsDir, fileName);
+    const content = await fs.readFile(indexPath, "utf8");
+    const markerIndex = content.indexOf("thread-workspace-root-hints");
+    if (markerIndex === -1) {
+      continue;
+    }
+
+    const hitCount = content.split(WINDOWS_PATH_NORMALIZER_SOURCE).length - 1;
+    if (hitCount === 0) {
+      throw new Error(`Windows path normalizer target not found in ${indexPath}`);
+    }
+    if (hitCount !== 1) {
+      throw new Error(`Unexpected windows path normalizer target count (${hitCount}) in ${indexPath}`);
+    }
+
+    const patched = content.replace(
+      WINDOWS_PATH_NORMALIZER_SOURCE,
+      WINDOWS_PATH_NORMALIZER_REPLACEMENT,
+    );
+    await fs.writeFile(indexPath, patched, "utf8");
+    return { indexPath, hitCount };
+  }
+
+  throw new Error(`Thread workspace root marker not found in index bundle files under ${assetsDir}`);
+}
+
 async function prepareWinSource(paths, sourcePkg, versions) {
   await fse.emptyDir(paths.winSource);
   await fse.copy(paths.appUnpacked, paths.winSource);
@@ -127,8 +183,10 @@ async function prepareWinSource(paths, sourcePkg, versions) {
   await fse.copy(path.join(paths.nativeDir, "node_modules", "better-sqlite3"), sqliteTarget);
   const runtimePackage = buildRuntimePackage(sourcePkg, versions);
   await writeJson(path.join(paths.winSource, "package.json"), runtimePackage);
+  const codexHomePatch = await patchCodexHomeForBundledCli(paths.winSource);
+  const windowsPathPatch = await patchWindowsExtendedPathNormalization(paths.winSource);
   const sunsetPatch = await disableSunsetUpgradeGate(paths.winSource);
-  return { runtimePackage, sunsetPatch };
+  return { runtimePackage, sunsetPatch, codexHomePatch, windowsPathPatch };
 }
 
 async function prepareBinaries(toolkitRoot, resourcesRoot, winBinariesDir, winExtraDir) {
@@ -304,6 +362,10 @@ async function main() {
     installerFile: path.resolve(installerPath),
     installerName: path.basename(installerPath),
     sha256,
+    codexHomePatchApplied: true,
+    codexHomePatchedFile: path.resolve(prepared.codexHomePatch.mainPath),
+    windowsExtendedPathPatchApplied: true,
+    windowsExtendedPathPatchedFile: path.resolve(prepared.windowsPathPatch.indexPath),
     sunsetPatchApplied: true,
     sunsetPatchedFile: path.resolve(prepared.sunsetPatch.indexPath),
   });

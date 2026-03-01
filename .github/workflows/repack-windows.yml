@@ -13,6 +13,9 @@ on:
         required: true
         default: true
         type: boolean
+  schedule:
+    # 每天北京时间 08:00（UTC 00:00）自动触发
+    - cron: "0 0 * * *"
 
 permissions:
   contents: write
@@ -47,9 +50,28 @@ jobs:
         working-directory: ${{ steps.locate.outputs.toolkit_dir }}
         run: npm ci
 
+      - name: Resolve Trigger Inputs
+        id: trigger
+        shell: pwsh
+        run: |
+          $defaultDmgUrl = "https://persistent.oaistatic.com/codex-app-prod/Codex.dmg"
+          $dmgUrl = "${{ inputs.dmg_url }}"
+          if ([string]::IsNullOrWhiteSpace($dmgUrl)) {
+            $dmgUrl = $defaultDmgUrl
+          }
+
+          $publishRelease = $true
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $publishRelease = "${{ inputs.publish_release }}" -eq "true"
+          }
+          $publishReleaseText = if ($publishRelease) { "true" } else { "false" }
+
+          "dmg_url=$dmgUrl" >> $env:GITHUB_OUTPUT
+          "publish_release=$publishReleaseText" >> $env:GITHUB_OUTPUT
+
       - name: Repack Installer
         working-directory: ${{ steps.locate.outputs.toolkit_dir }}
-        run: npm run repack -- --dmg-url "${{ inputs.dmg_url }}"
+        run: npm run repack -- --dmg-url "${{ steps.trigger.outputs.dmg_url }}"
 
       - name: Read Build Metadata
         id: metadata
@@ -85,8 +107,44 @@ jobs:
           $tag = "codex-win-v$version"
           "value=$tag" >> $env:GITHUB_OUTPUT
 
+      - name: Check Existing Release
+        id: release_check
+        if: ${{ steps.trigger.outputs.publish_release == 'true' }}
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $repo = "${{ github.repository }}"
+          $tag = "${{ steps.tag.outputs.value }}"
+          $headers = @{
+            "Authorization" = "Bearer $env:GITHUB_TOKEN"
+            "Accept" = "application/vnd.github+json"
+            "X-GitHub-Api-Version" = "2022-11-28"
+          }
+
+          $url = "https://api.github.com/repos/$repo/releases/tags/$tag"
+          $exists = $false
+          try {
+            Invoke-RestMethod -Method Get -Uri $url -Headers $headers | Out-Null
+            $exists = $true
+          } catch {
+            $statusCode = $_.Exception.Response.StatusCode.value__
+            if ($statusCode -ne 404) {
+              throw
+            }
+          }
+          $existsText = if ($exists) { "true" } else { "false" }
+
+          "exists=$existsText" >> $env:GITHUB_OUTPUT
+
+      - name: Skip Duplicate Release
+        if: ${{ steps.trigger.outputs.publish_release == 'true' && steps.release_check.outputs.exists == 'true' }}
+        shell: pwsh
+        run: |
+          Write-Host "Release tag ${{ steps.tag.outputs.value }} already exists. Skipping publish."
+
       - name: Publish GitHub Release
-        if: ${{ inputs.publish_release }}
+        if: ${{ steps.trigger.outputs.publish_release == 'true' && steps.release_check.outputs.exists != 'true' }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.value }}
@@ -94,7 +152,7 @@ jobs:
           body: |
             Version: ${{ steps.metadata.outputs.version }}
             Tag: ${{ steps.tag.outputs.value }}
-            Source DMG: ${{ inputs.dmg_url }}
+            Source DMG: ${{ steps.trigger.outputs.dmg_url }}
             Installer: ${{ steps.metadata.outputs.installer_name }}
             SHA256: ${{ steps.metadata.outputs.sha256 }}
           files: |
