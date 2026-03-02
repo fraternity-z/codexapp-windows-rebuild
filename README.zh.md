@@ -1,62 +1,62 @@
 # Codex Windows Repack Toolkit
 
-English | [中文](README.zh.md)
+[English](README.md) | 中文
 
-Convert `Codex.dmg` (macOS package) into a Windows installer (`.exe`).
+将 `Codex.dmg`（macOS 安装包）转换为 Windows 安装程序（`.exe`）。
 
-Default DMG URL:
+默认 DMG 地址：
 
 `https://persistent.oaistatic.com/codex-app-prod/Codex.dmg`
 
-## Features
+## 功能
 
-- Repack `Codex.dmg` into a Windows NSIS installer
-- Auto-use local `Codex.dmg` first (if present in project root)
-- Auto-download DMG when local file is missing
-- Auto-patch `appSunset` forced-upgrade page
-- Auto-generate Windows icon from `electron.icns`
+- 将 `Codex.dmg` 重封装为 Windows NSIS 安装包
+- 优先使用项目根目录下本地 `Codex.dmg`
+- 本地文件不存在时自动下载 DMG
+- 自动补丁 `appSunset` 强制升级页
+- 自动从 `electron.icns` 生成 Windows 图标
 
-## Requirements
+## 环境要求
 
 - Windows 10/11 x64
 - Node.js 22 + npm
-- Visual Studio Build Tools (C++ toolchain) if native module compilation fails locally
+- 如本地原生模块编译失败，请安装 Visual Studio Build Tools（C++ 工具链）
 
-## Usage
+## 使用方法
 
-Run in project root:
+在项目根目录执行：
 
-1. Install dependencies
+1. 安装依赖
 
 ```powershell
 npm ci
 ```
 
-2. Default build
+2. 默认构建
 
 ```powershell
 npm run repack
 ```
 
-3. Build with custom DMG URL
+3. 指定 DMG 下载地址构建
 
 ```powershell
 npm run repack -- --dmg-url "https://persistent.oaistatic.com/codex-app-prod/Codex.dmg"
 ```
 
-4. Build with local DMG file
+4. 指定本地 DMG 文件构建
 
 ```powershell
 npm run repack -- --dmg-file "D:\path\Codex.dmg"
 ```
 
-5. Optional: override Electron version
+5. 可选：覆盖 Electron 版本
 
 ```powershell
 npm run repack -- --dmg-file "D:\path\Codex.dmg" --electron-version "40.0.0"
 ```
 
-## PowerShell Shortcut
+## PowerShell 快捷入口
 
 ```powershell
 .\run.ps1
@@ -65,9 +65,9 @@ npm run repack -- --dmg-file "D:\path\Codex.dmg" --electron-version "40.0.0"
 .\run.ps1 -DmgFile "D:\path\Codex.dmg" -ElectronVersion "40.0.0"
 ```
 
-## Output
+## 输出文件
 
-Files are generated in `release/`:
+构建产物位于 `release/`：
 
 - `Codex-Setup-<version>.exe`
 - `*.blockmap`
