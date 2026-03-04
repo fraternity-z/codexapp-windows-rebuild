@@ -13,10 +13,6 @@ on:
         required: true
         default: true
         type: boolean
-  schedule:
-    # 每天北京时间 08:00（UTC 00:00）自动触发
-    - cron: "0 0 * * *"
-
 permissions:
   contents: write
 

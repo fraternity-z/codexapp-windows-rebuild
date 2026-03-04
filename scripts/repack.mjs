@@ -30,9 +30,9 @@ const DEFAULT_LOCAL_DMG = "Codex.dmg";
 const SUNSET_GUARD_PATTERN = /const s=[A-Za-z_$][A-Za-z0-9_$]*\(i\);if\(r\)\{/g;
 const SUNSET_GUARD_AFTER = "const s=!1;if(r){";
 const SUNSET_GUARD_CONTEXT_RADIUS = 2500;
-const WINDOWS_PATH_NORMALIZER_SOURCE = 'function Vr(t){return t.replace(/\\\\/g,"/")}';
-const WINDOWS_PATH_NORMALIZER_REPLACEMENT =
-  'function Vr(t){const e=t.replace(/\\\\/g,"/");return e.startsWith("//?/")||e.startsWith("//./")?e.slice(4):e}';
+const WINDOWS_PATH_NORMALIZER_PATTERN =
+  /function\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\)\s*\{\s*return\s+\2\.replace\(\/\\\\\/g,"\/"\)\s*\}/g;
+const WINDOWS_PATH_NORMALIZER_CONTEXT_RADIUS = 2500;
 const CODEX_HOME_ENV_PATCH_PATTERN =
   /const n=\{\.\.\.process\.env,RUST_LOG:process\.env\.RUST_LOG\?\?"warn",CODEX_INTERNAL_ORIGINATOR_OVERRIDE:t\.defaultOriginator\?\?([A-Za-z_$][A-Za-z0-9_$]*)\};/g;
 const WINDOWS_ICON_SIZES = [16, 24, 32, 48, 64, 128, 256];
@@ -150,20 +150,30 @@ async function patchWindowsExtendedPathNormalization(winSourceDir) {
       continue;
     }
 
-    const hitCount = content.split(WINDOWS_PATH_NORMALIZER_SOURCE).length - 1;
-    if (hitCount === 0) {
+    const windowStart = Math.max(0, markerIndex - WINDOWS_PATH_NORMALIZER_CONTEXT_RADIUS);
+    const windowEnd = Math.min(content.length, markerIndex + WINDOWS_PATH_NORMALIZER_CONTEXT_RADIUS);
+    const windowContent = content.slice(windowStart, windowEnd);
+    const matches = Array.from(windowContent.matchAll(WINDOWS_PATH_NORMALIZER_PATTERN));
+    if (matches.length === 0) {
       throw new Error(`Windows path normalizer target not found in ${indexPath}`);
     }
-    if (hitCount !== 1) {
-      throw new Error(`Unexpected windows path normalizer target count (${hitCount}) in ${indexPath}`);
+    if (matches.length !== 1) {
+      throw new Error(`Unexpected windows path normalizer target count (${matches.length}) in ${indexPath}`);
     }
-
-    const patched = content.replace(
-      WINDOWS_PATH_NORMALIZER_SOURCE,
-      WINDOWS_PATH_NORMALIZER_REPLACEMENT,
-    );
+    const [match] = matches;
+    if (match.index == null) {
+      throw new Error(`Failed to locate windows path normalizer index in ${indexPath}`);
+    }
+    const functionName = match[1];
+    const argName = match[2];
+    const replacement = `function ${functionName}(${argName}){const e=${argName}.replace(/\\\\/g,"/");return e.startsWith("//?/")||e.startsWith("//./")?e.slice(4):e}`;
+    const absoluteIndex = windowStart + match.index;
+    const patched =
+      content.slice(0, absoluteIndex) +
+      replacement +
+      content.slice(absoluteIndex + match[0].length);
     await fs.writeFile(indexPath, patched, "utf8");
-    return { indexPath, hitCount };
+    return { indexPath, hitCount: matches.length };
   }
 
   throw new Error(`Thread workspace root marker not found in index bundle files under ${assetsDir}`);
