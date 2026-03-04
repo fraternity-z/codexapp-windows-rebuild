@@ -127,7 +127,7 @@ async function patchCodexHomeForBundledCli(winSourceDir) {
   }
 
   const patched = content.replace(CODEX_HOME_ENV_PATCH_PATTERN, (_full, fallbackVar) => {
-    return `const n={...process.env,RUST_LOG:process.env.RUST_LOG??"warn",CODEX_INTERNAL_ORIGINATOR_OVERRIDE:t.defaultOriginator??${fallbackVar},CODEX_HOME:process.env.CODEX_HOME??Zt({})};`;
+    return `const n={...process.env,RUST_LOG:process.env.RUST_LOG??"warn",CODEX_INTERNAL_ORIGINATOR_OVERRIDE:t.defaultOriginator??${fallbackVar},CODEX_HOME:process.env.CODEX_HOME??Bt({hostConfig:t.hostConfig})};`;
   });
 
   await fs.writeFile(mainPath, patched, "utf8");
