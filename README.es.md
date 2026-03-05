@@ -1,5 +1,7 @@
 # Codex Windows Repack Toolkit
 
+> ⚠️ La versión oficial para Windows ya fue publicada, y este proyecto está en pausa de actualizaciones (archivado).
+
 [English](README.md) | [中文](README.zh.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | Español
 
 Convierte `Codex.dmg` (paquete de macOS) en un instalador de Windows (`.exe`).
