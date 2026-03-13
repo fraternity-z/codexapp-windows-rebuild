@@ -2,6 +2,8 @@
 
 > ⚠️ 官方已发布 Windows 版本，当前项目已暂停更新（已归档）。
 
+如果你只是想先尝试一个轻量版的 Codex App，可以看看 [codex-app-plus](https://github.com/fraternity-z/codex-app-plus)。
+
 [English](README.md) | 中文 | [日本語](README.ja.md) | [한국어](README.ko.md) | [Español](README.es.md)
 
 将 `Codex.dmg`（macOS 安装包）转换为 Windows 安装程序（`.exe`）。
